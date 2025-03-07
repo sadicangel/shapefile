@@ -1,0 +1,50 @@
+﻿using System.Buffers.Binary;
+using System.Collections.Immutable;
+
+namespace Shape.Geometries;
+
+public sealed record class MultiPatch(ImmutableArray<Surface> Surfaces)
+    : Geometry(BoundingBox.FromPoints(Surfaces.SelectMany(x => x))), IBinaryGeometry<MultiPatch>
+{
+    public static MultiPatch Empty { get; } = new MultiPatch([]);
+
+    public static MultiPatch Read(ReadOnlySpan<byte> source)
+    {
+        var shapeType = (ShapeType)BinaryPrimitives.ReadInt32LittleEndian(source);
+        if (shapeType is ShapeType.Null) return Empty;
+        var patchCount = BinaryPrimitives.ReadInt32LittleEndian(source[36..]);
+        var pointCount = BinaryPrimitives.ReadInt32LittleEndian(source[40..]);
+        var surfaces = ImmutableArray.CreateBuilder<Surface>(patchCount);
+
+        var tOffset = 44 + (patchCount * sizeof(int));
+        var pOffset = tOffset + (patchCount * sizeof(int));
+        var zOffset = pOffset + 16 + (2 * pointCount * sizeof(double));
+        var mOffset = zOffset + 16 + (pointCount * sizeof(double));
+
+        var ringIndices = source[44..pOffset];
+
+        for (var i = 0; i < patchCount; ++i)
+        {
+            var start = BinaryPrimitives.ReadInt32LittleEndian(ringIndices[(i * sizeof(int))..]);
+            var end = i < patchCount
+                ? BinaryPrimitives.ReadInt32LittleEndian(ringIndices[((i + 1) * sizeof(int))..])
+                : pointCount;
+
+            var points = ImmutableArray.CreateBuilder<Point>(end - start);
+
+            while (start < end)
+            {
+                var x = BinaryPrimitives.ReadDoubleLittleEndian(source[(pOffset + start * 2 * sizeof(double))..]);
+                var y = BinaryPrimitives.ReadDoubleLittleEndian(source[(pOffset + start * 2 * sizeof(double) + sizeof(double))..]);
+                var z = BinaryPrimitives.ReadDoubleLittleEndian(source[(zOffset + (start * sizeof(double)))..]);
+                var m = BinaryPrimitives.ReadDoubleLittleEndian(source[(mOffset + (start * sizeof(double)))..]);
+                points.Add(new Point(x, y, z, m));
+                ++start;
+            }
+
+            var type = (SurfaceType)BinaryPrimitives.ReadInt32LittleEndian(source[(tOffset + start * sizeof(int))..]);
+            surfaces.Add(new Surface(type, points.MoveToImmutable()));
+        }
+        return new MultiPatch(surfaces.MoveToImmutable());
+    }
+}
