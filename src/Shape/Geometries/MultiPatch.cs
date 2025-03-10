@@ -3,10 +3,21 @@ using System.Collections.Immutable;
 
 namespace Shape.Geometries;
 
-public sealed record class MultiPatch(ImmutableArray<Surface> Surfaces)
-    : Geometry(BoundingBox.FromPoints(Surfaces.SelectMany(x => x))), IBinaryGeometry<MultiPatch>
+public sealed record class MultiPatch(ImmutableArray<Surface> Surfaces) : Geometry, IBinaryGeometry<MultiPatch>
 {
     public static MultiPatch Empty { get; } = new MultiPatch([]);
+
+    public override BoundingBox GetBoundingBox() => BoundingBox.FromPoints(Surfaces.SelectMany(x => x));
+
+    public bool Equals(MultiPatch? other) => other is not null && Surfaces.SequenceEqual(other.Surfaces);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        foreach (var surface in Surfaces)
+            hash.Add(surface);
+        return hash.ToHashCode();
+    }
 
     public static MultiPatch Read(ReadOnlySpan<byte> source)
     {
@@ -26,9 +37,9 @@ public sealed record class MultiPatch(ImmutableArray<Surface> Surfaces)
         for (var i = 0; i < patchCount; ++i)
         {
             var start = BinaryPrimitives.ReadInt32LittleEndian(ringIndices[(i * sizeof(int))..]);
-            var end = i < patchCount
+            var end = i + 1 < patchCount
                 ? BinaryPrimitives.ReadInt32LittleEndian(ringIndices[((i + 1) * sizeof(int))..])
-                : pointCount;
+                : pointCount - 1;
 
             var points = ImmutableArray.CreateBuilder<Point>(end - start);
 

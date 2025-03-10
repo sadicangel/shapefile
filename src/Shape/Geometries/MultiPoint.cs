@@ -4,10 +4,21 @@ using DotNext.Buffers;
 
 namespace Shape.Geometries;
 
-public sealed record class MultiPoint(ImmutableArray<Point> Points)
-    : Geometry(BoundingBox.FromPoints(Points)), IBinaryGeometry<MultiPoint>, IEquatable<MultiPoint>
+public sealed record class MultiPoint(ImmutableArray<Point> Points) : Geometry, IBinaryGeometry<MultiPoint>, IEquatable<MultiPoint>
 {
     public static MultiPoint Empty { get; } = new MultiPoint([]);
+
+    public override BoundingBox GetBoundingBox() => BoundingBox.FromPoints(Points);
+
+    public bool Equals(MultiPoint? other) => other is not null && Points.SequenceEqual(other.Points);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        foreach (var point in Points)
+            hash.Add(point);
+        return hash.ToHashCode();
+    }
 
     public static MultiPoint Read(ReadOnlySpan<byte> source)
     {
@@ -55,8 +66,4 @@ public sealed record class MultiPoint(ImmutableArray<Point> Points)
         }
         return new MultiPoint(builder.MoveToImmutable());
     }
-
-    public bool Equals(MultiPoint? other) => other is not null && Points.SequenceEqual(other.Points);
-
-    public override int GetHashCode() => HashCode.Combine(Points);
 }

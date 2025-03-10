@@ -5,12 +5,22 @@ namespace Shape.Geometries;
 
 
 
-public sealed record class Polygon(ImmutableArray<LinearRing> Rings)
-    : Geometry(BoundingBox.FromPoints(Rings.SelectMany(x => x))), IBinaryGeometry<Polygon>
+public sealed record class Polygon(ImmutableArray<LinearRing> Rings) : Geometry, IBinaryGeometry<Polygon>
 {
     public static Polygon Empty { get; } = new([[]]);
 
     public LinearRing ExteriorRing => Rings[0];
+
+    public override BoundingBox GetBoundingBox() => BoundingBox.FromPoints(Rings.SelectMany(x => x));
+
+    public bool Equals(Polygon? other) => other is not null && Rings.SequenceEqual(other.Rings);
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        foreach (var ring in Rings)
+            hash.Add(ring);
+        return hash.ToHashCode();
+    }
 
     public static Polygon Read(ReadOnlySpan<byte> source)
     {
@@ -29,9 +39,9 @@ public sealed record class Polygon(ImmutableArray<LinearRing> Rings)
         for (var i = 0; i < ringCount; ++i)
         {
             var start = BinaryPrimitives.ReadInt32LittleEndian(ringIndices[(i * sizeof(int))..]);
-            var end = i < ringCount
+            var end = i + 1 < ringCount
                 ? BinaryPrimitives.ReadInt32LittleEndian(ringIndices[((i + 1) * sizeof(int))..])
-                : pointCount;
+                : pointCount - 1;
 
             var points = ImmutableArray.CreateBuilder<Point>(end - start);
 
