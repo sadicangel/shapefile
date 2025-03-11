@@ -10,7 +10,7 @@ public abstract record Geometry
 
     public abstract BoundingBox GetBoundingBox();
 
-    public static T Read<T>(ReadOnlySpan<byte> source) where T : Geometry, IBinaryGeometry<T> => T.Read(source);
+    public static T Read<T>(ReadOnlySpan<byte> source) where T : Geometry, IGeometry<T> => T.Read(source);
 
     public static Geometry Read(ReadOnlySpan<byte> source, ShapeType expectedShapeType)
     {

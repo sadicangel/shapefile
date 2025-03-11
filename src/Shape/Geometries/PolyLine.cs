@@ -3,7 +3,7 @@ using System.Collections.Immutable;
 
 namespace Shape.Geometries;
 
-public sealed record class PolyLine(ImmutableArray<LineString> Lines) : Geometry, IBinaryGeometry<PolyLine>
+public sealed record class PolyLine(ImmutableArray<LineString> Lines) : Geometry, IGeometry<PolyLine>
 {
     public static PolyLine Empty { get; } = new([[]]);
 

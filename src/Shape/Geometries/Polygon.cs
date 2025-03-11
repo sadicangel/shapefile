@@ -5,7 +5,7 @@ namespace Shape.Geometries;
 
 
 
-public sealed record class Polygon(ImmutableArray<LinearRing> Rings) : Geometry, IBinaryGeometry<Polygon>
+public sealed record class Polygon(ImmutableArray<LinearRing> Rings) : Geometry, IGeometry<Polygon>
 {
     public static Polygon Empty { get; } = new([[]]);
 

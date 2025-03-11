@@ -4,7 +4,7 @@ using DotNext.Buffers;
 
 namespace Shape.Geometries;
 
-public sealed record class MultiPoint(ImmutableArray<Point> Points) : Geometry, IBinaryGeometry<MultiPoint>, IEquatable<MultiPoint>
+public sealed record class MultiPoint(ImmutableArray<Point> Points) : Geometry, IGeometry<MultiPoint>, IEquatable<MultiPoint>
 {
     public static MultiPoint Empty { get; } = new MultiPoint([]);
 

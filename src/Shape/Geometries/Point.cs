@@ -3,7 +3,7 @@ using System.Buffers.Binary;
 
 namespace Shape.Geometries;
 
-public sealed record class Point(double X, double Y, double Z, double M) : Geometry, IBinaryGeometry<Point>
+public sealed record class Point(double X, double Y, double Z, double M) : Geometry, IGeometry<Point>
 {
     public static Point Empty { get; } = new Point(NoValue, NoValue, NoValue, NoValue);
 

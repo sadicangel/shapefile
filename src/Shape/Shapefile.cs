@@ -165,46 +165,67 @@ public sealed class Shapefile : IDisposable
     }
 
     public ShapeRecord<TGeometry, DbfRecord> GetRecord<TGeometry>(int index)
-        where TGeometry : Geometry, IBinaryGeometry<TGeometry>
+        where TGeometry : Geometry, IGeometry<TGeometry>
     {
-        // Move stream to the start of the record.
-        // Read the record header.
-        // Read the record data.
-        // TGeometry geometry = TGeometry.Read(data);
+        if (!ShapeType.IsCompatibleWithGeometry<TGeometry>())
+        {
+            throw new InvalidOperationException($"Shape type '{ShapeType}' is not compatible with geometry type '{typeof(TGeometry)}'");
+        }
+
+        var length = PrepareStreamToReadRecord(index);
+
+        using var buffer = length < 256
+            ? new SpanOwner<byte>(stackalloc byte[length])
+            : new SpanOwner<byte>(length);
+
+        _shp.ReadExactly(buffer.Span);
+
+        var geometry = TGeometry.Read(buffer.Span);
         var attributes = _dbf.GetRecord(index);
-        // return new ShapeRecord<TGeometry, DbfRecord>(geometry, attributes);
-        throw new NotImplementedException();
+        return new ShapeRecord<TGeometry, DbfRecord>(geometry, attributes);
     }
 
     public ShapeRecord<TGeometry, TAttributes> GetRecord<TGeometry, TAttributes>(int index)
-        where TGeometry : Geometry
+        where TGeometry : Geometry, IGeometry<TGeometry>
     {
-        // Move stream to the start of the record.
-        // Read the record header.
-        // Read the record data.
-        // TGeometry geometry = TGeometry.Read(data);
+        if (!ShapeType.IsCompatibleWithGeometry<TGeometry>())
+        {
+            throw new InvalidOperationException($"Shape type '{ShapeType}' is not compatible with geometry type '{typeof(TGeometry)}'");
+        }
+
+        var length = PrepareStreamToReadRecord(index);
+
+        using var buffer = length < 256
+            ? new SpanOwner<byte>(stackalloc byte[length])
+            : new SpanOwner<byte>(length);
+
+        _shp.ReadExactly(buffer.Span);
+
+        var geometry = TGeometry.Read(buffer.Span);
         var attributes = _dbf.GetRecord<TAttributes>(index);
-        // return new ShapeRecord<TGeometry, TAttributes>(geometry, attributes);
-        throw new NotImplementedException();
+        return new ShapeRecord<TGeometry, TAttributes>(geometry, attributes);
     }
 
     public IEnumerable<ShapeRecord<Geometry, DbfRecord>> EnumerateRecords()
     {
-        for (var i = 0; i < RecordCount; ++i)
+        var recordCount = RecordCount;
+        for (var i = 0; i < recordCount; ++i)
             yield return GetRecord(i);
     }
 
     public IEnumerable<ShapeRecord<TGeometry, DbfRecord>> EnumerateRecords<TGeometry>()
-        where TGeometry : Geometry, IBinaryGeometry<TGeometry>
+        where TGeometry : Geometry, IGeometry<TGeometry>
     {
-        for (var i = 0; i < RecordCount; ++i)
+        var recordCount = RecordCount;
+        for (var i = 0; i < recordCount; ++i)
             yield return GetRecord<TGeometry>(i);
     }
 
     public IEnumerable<ShapeRecord<TGeometry, TAttributes>> EnumerateRecords<TGeometry, TAttributes>()
-        where TGeometry : Geometry
+        where TGeometry : Geometry, IGeometry<TGeometry>
     {
-        for (var i = 0; i < RecordCount; ++i)
+        var recordCount = RecordCount;
+        for (var i = 0; i < recordCount; ++i)
             yield return GetRecord<TGeometry, TAttributes>(i);
     }
 }

@@ -3,7 +3,7 @@ using System.Collections.Immutable;
 
 namespace Shape.Geometries;
 
-public sealed record class MultiPatch(ImmutableArray<Surface> Surfaces) : Geometry, IBinaryGeometry<MultiPatch>
+public sealed record class MultiPatch(ImmutableArray<Surface> Surfaces) : Geometry, IGeometry<MultiPatch>
 {
     public static MultiPatch Empty { get; } = new MultiPatch([]);
 
