@@ -1,6 +1,6 @@
 ﻿namespace Shape.Geometries;
 
-public interface IBinaryGeometry<T> where T : Geometry
+public interface IGeometry<T> where T : Geometry
 {
     abstract static T Empty { get; }
 

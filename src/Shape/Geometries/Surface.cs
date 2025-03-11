@@ -14,7 +14,14 @@ public readonly record struct Surface(SurfaceType Type, ImmutableArray<Point> Po
     }
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     public bool Equals(Surface other) => Type == other.Type && Points.SequenceEqual(other.Points);
-    public override int GetHashCode() => Points.Aggregate(new HashCode(), (h, c) => { h.Add(c); return h; }, h => h.ToHashCode());
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Type);
+        foreach (var point in Points)
+            hash.Add(point);
+        return hash.ToHashCode();
+    }
 }
 
 public enum SurfaceType

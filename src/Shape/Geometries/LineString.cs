@@ -19,7 +19,13 @@ public readonly record struct LineString(ImmutableArray<Point> Points) : IReadOn
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
     public bool Equals(LineString other) => Points.SequenceEqual(other.Points);
-    public override int GetHashCode() => Points.Aggregate(new HashCode(), (h, c) => { h.Add(c); return h; }, h => h.ToHashCode());
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        foreach (var point in Points)
+            hash.Add(point);
+        return hash.ToHashCode();
+    }
 }
 
 internal static class LineStringBuilder

@@ -3,30 +3,18 @@ using System.Buffers.Binary;
 
 namespace Shape.Geometries;
 
-public sealed record class Point : Geometry, IBinaryGeometry<Point>
+public sealed record class Point(double X, double Y, double Z, double M) : Geometry, IGeometry<Point>
 {
-    internal const double MinValue = -10e38;
-    internal const double NoValue = -101e37;
-
     public static Point Empty { get; } = new Point(NoValue, NoValue, NoValue, NoValue);
 
-    public double X { get; init; }
-    public double Y { get; init; }
-    public double Z { get; init; }
     public bool HasZ => Z > MinValue;
-    public double M { get; init; }
     public bool HasM => M > MinValue;
 
-    public Point(double x, double y, double z, double m) : base(default(BoundingBox))
-    {
-        X = x;
-        Y = y;
-        Z = z;
-        M = m;
-        BoundingBox = new BoundingBox(this, this);
-    }
     public Point(double x, double y, double m) : this(x, y, NoValue, m) { }
+
     public Point(double x, double y) : this(x, y, NoValue, NoValue) { }
+
+    public override BoundingBox GetBoundingBox() => new(this, this);
 
     public static Point Read(ReadOnlySpan<byte> source)
     {
