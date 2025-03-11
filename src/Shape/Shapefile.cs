@@ -136,7 +136,15 @@ public sealed class Shapefile : IDisposable
     internal int PrepareStreamToReadRecord(int index)
     {
         var (offset, length) = _shx.GetRecord(index);
+#if !DEBUG
+        _shp.Position = offset + 8;
+#else
         _shp.Position = offset;
+        Span<byte> buffer = stackalloc byte[8];
+        _shp.ReadExactly(buffer);
+        Debug.Assert(BinaryPrimitives.ReadInt32BigEndian(buffer[0..]) == index + 1);
+        Debug.Assert(BinaryPrimitives.ReadInt32BigEndian(buffer[4..]) == length / 2);
+#endif
         return length;
     }
 
@@ -151,10 +159,7 @@ public sealed class Shapefile : IDisposable
 
         _shp.ReadExactly(buffer.Span);
 
-        Debug.Assert(BinaryPrimitives.ReadInt32BigEndian(buffer.Span[0..]) == index + 1);
-        Debug.Assert(BinaryPrimitives.ReadInt32BigEndian(buffer.Span[4..]) == length / 2);
-
-        var geometry = Geometry.Read(buffer.Span[8..], ShapeType);
+        var geometry = Geometry.Read(buffer.Span, ShapeType);
         var attributes = _dbf.GetRecord(index);
         return new ShapeRecord<Geometry, DbfRecord>(geometry, attributes);
     }

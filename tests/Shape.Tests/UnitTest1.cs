@@ -7,7 +7,9 @@ public class UnitTest1
     [Fact]
     public void Test1()
     {
+#if !DEBUG
         Assert.Skip("Local file path is not available in CI");
+#endif
 
         var path = @"D:\Data\railways.shp";
 

@@ -24,7 +24,7 @@ public sealed record class MultiPoint(ImmutableArray<Point> Points) : Geometry, 
     {
         var shapeType = (ShapeType)BinaryPrimitives.ReadInt32LittleEndian(source);
         if (shapeType is ShapeType.Null) return Empty;
-        // Skip bounding box.
+
         var pointCount = BinaryPrimitives.ReadInt32LittleEndian(source[36..]);
         using var memory = new SpanOwner<(double X, double Y, double Z, double M)>(pointCount);
         var offset = 40;
@@ -34,16 +34,14 @@ public sealed record class MultiPoint(ImmutableArray<Point> Points) : Geometry, 
             offset += 8;
             memory.Span[i].Y = BinaryPrimitives.ReadDoubleLittleEndian(source[offset..]);
             offset += 8;
-
-            // Initialize Z and M values with NoValue.
-            memory.Span[i].Z = Point.NoValue;
-            memory.Span[i].M = Point.NoValue;
+            memory.Span[i].Z = NoValue;
+            memory.Span[i].M = NoValue;
         }
         if (shapeType is ShapeType.MultiPointZ or ShapeType.MultiPointM)
         {
             if (shapeType is ShapeType.MultiPointZ)
             {
-                offset += 16; // Skip Z range.
+                offset += 16;
                 for (var i = 0; i < pointCount; i += 2)
                 {
                     memory.Span[i].Z = BinaryPrimitives.ReadDoubleLittleEndian(source[offset..]);
@@ -51,7 +49,7 @@ public sealed record class MultiPoint(ImmutableArray<Point> Points) : Geometry, 
                 }
             }
 
-            offset += 16; // Skip M range.
+            offset += 16;
             for (var i = 0; i < pointCount; i += 2)
             {
                 memory.Span[i].M = BinaryPrimitives.ReadDoubleLittleEndian(source[offset..]);
