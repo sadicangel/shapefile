@@ -9,16 +9,16 @@ public readonly record struct LineString(ImmutableArray<Point> Points) : IReadOn
 {
     public Point this[int index] => Points[index];
 
-    public int Count => Points.Length;
+    int IReadOnlyCollection<Point>.Count => Points.Length;
 
-    public IEnumerator<Point> GetEnumerator()
-    {
-        foreach (var point in Points)
-            yield return point;
-    }
+    public int Length => Points.Length;
+
+    public IEnumerator<Point> GetEnumerator() => ((IEnumerable<Point>)Points).GetEnumerator();
+
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
     public bool Equals(LineString other) => Points.SequenceEqual(other.Points);
+
     public override int GetHashCode()
     {
         var hash = new HashCode();

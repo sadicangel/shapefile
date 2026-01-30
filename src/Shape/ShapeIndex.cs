@@ -1,8 +1,9 @@
-﻿
-using System.Buffers.Binary;
+﻿using System.Buffers.Binary;
+using System.Collections;
 
 namespace Shape;
-public sealed class ShapeIndex : IDisposable
+
+public sealed class ShapeIndex : IDisposable, IEnumerable<ShapeIndexRecord>
 {
     internal const int HeaderLength = 100;
 
@@ -53,6 +54,7 @@ public sealed class ShapeIndex : IDisposable
             _shx.Position = 24;
             _shx.Write(hLength);
         }
+
         _shx.Flush();
     }
 
@@ -86,7 +88,7 @@ public sealed class ShapeIndex : IDisposable
         _shx.Write(buffer);
     }
 
-    public IEnumerable<ShapeIndexRecord> EnumerateRecords()
+    public IEnumerator<ShapeIndexRecord> GetEnumerator()
     {
         var count = RecordCount;
         for (var i = 0; i < count; i++)
@@ -94,4 +96,6 @@ public sealed class ShapeIndex : IDisposable
             yield return GetRecord(i);
         }
     }
+
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }
