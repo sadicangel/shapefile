@@ -1,77 +1,117 @@
 ﻿using System.Buffers.Binary;
+using System.Collections;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using DBase;
 using DotNext.Buffers;
 using Shape.Geometries;
+using Shape.Serialization;
 
 namespace Shape;
 
-public abstract class Shapefile<TGeometry, TAttributes>
-    where TGeometry : Geometry
+public sealed class Shapefile : Shapefile<Geometry, DbfRecord, GeometrySerializer>
 {
+    internal Shapefile(Stream shp, ShapeIndex shx, Dbf dbf, ShapeType shapeType, BoundingBox boundingBox)
+        : base(shp, shx, dbf, shapeType, boundingBox) { }
+
+    public static Shapefile Open(string fileName)
+    {
+        var (shp, shx, dbf, shapeType, boundingBox) = OpenCore(fileName);
+        return new Shapefile(shp, shx, dbf, shapeType, boundingBox);
+    }
+
+    public static Shapefile<TGeometry> Open<TGeometry>(string fileName)
+        where TGeometry : Geometry, IGeometrySerializer<TGeometry>
+    {
+        var (shp, shx, dbf, shapeType, boundingBox) = OpenCore(fileName);
+        return new Shapefile<TGeometry>(shp, shx, dbf, shapeType, boundingBox);
+    }
+
+    public static Shapefile<TGeometry, TAttributes> Open<TGeometry, TAttributes>(string fileName)
+        where TGeometry : Geometry, IGeometrySerializer<TGeometry>
+    {
+        var (shp, shx, dbf, shapeType, boundingBox) = OpenCore(fileName);
+        return new Shapefile<TGeometry, TAttributes>(shp, shx, dbf, shapeType, boundingBox);
+    }
+
+    private static (FileStream shp, ShapeIndex shx, Dbf dbf, ShapeType shapeType, BoundingBox boundingBox) OpenCore(string fileName)
+    {
+        var shp = new FileStream(fileName, FileMode.Open, FileAccess.ReadWrite);
+        var shx = ShapeIndex.Open(Path.ChangeExtension(fileName, ".shx"));
+        var dbf = Dbf.Open(Path.ChangeExtension(fileName, ".dbf"));
+
+        var (shapeType, boundingBox) = ReadHeader(shp);
+        return (shp, shx, dbf, shapeType, boundingBox);
+    }
+
+    //public Shapefile<TGeometry> As<TGeometry>() where TGeometry : Geometry, IGeometrySerializer<TGeometry>
+    //{
+    //    return new Shapefile<TGeometry>()
+    //}
+
+    //public Shapefile<TGeometry, TAttributes> As<TGeometry, TAttributes>() where TGeometry : Geometry, IGeometrySerializer<TGeometry>
+    //{
+    //    return new Shapefile<TGeometry, TAttributes>()
+    //}
 }
 
-public sealed class Shapefile : IDisposable
+public sealed class Shapefile<TGeometry> : Shapefile<TGeometry, DbfRecord, TGeometry>
+    where TGeometry : Geometry, IGeometrySerializer<TGeometry>
 {
+    internal Shapefile(Stream shp, ShapeIndex shx, Dbf dbf, ShapeType shapeType, BoundingBox boundingBox)
+        : base(shp, shx, dbf, shapeType, boundingBox) { }
+}
+
+public sealed class Shapefile<TGeometry, TAttributes> : Shapefile<TGeometry, TAttributes, TGeometry>
+    where TGeometry : Geometry, IGeometrySerializer<TGeometry>
+{
+    internal Shapefile(Stream shp, ShapeIndex shx, Dbf dbf, ShapeType shapeType, BoundingBox boundingBox)
+        : base(shp, shx, dbf, shapeType, boundingBox) { }
+}
+
+public abstract class Shapefile<TGeometry, TAttributes, TSerializer>
+    : IShapefile, IDisposable, IEnumerable<ShapeRecord<TGeometry, TAttributes>>
+    where TGeometry : Geometry
+    where TSerializer : IGeometrySerializer<TGeometry>
+{
+    private bool _dirty;
     private readonly Stream _shp;
     private readonly ShapeIndex _shx;
     private readonly Dbf _dbf;
-    private bool _dirty;
+
+    protected Shapefile(Stream shp, ShapeIndex shx, Dbf dbf, ShapeType shapeType, BoundingBox boundingBox)
+    {
+        _shp = shp;
+        _shx = shx;
+        _dbf = dbf;
+        ShapeType = shapeType;
+        BoundingBox = boundingBox;
+
+        ShapeType.EnsureCompatibleWith<TGeometry>();
+    }
 
     public ShapeType ShapeType { get; }
+
     public BoundingBox BoundingBox { get; }
 
     public int RecordCount => _shx.RecordCount;
 
-    private Shapefile(Stream shp, ShapeIndex shx, Dbf dbf, ShapeType shapeType, BoundingBox boundingBox)
+    internal int PrepareStreamToReadRecord(int index)
     {
-        _shp = shp;
-        _shx = shx;
-        ShapeType = shapeType;
-        BoundingBox = boundingBox;
-        _dbf = dbf;
+        var (offset, length) = _shx.GetRecord(index);
+#if !DEBUG
+        shp.Position = offset + 8;
+#else
+        _shp.Position = offset;
+        Span<byte> buffer = stackalloc byte[8];
+        _shp.ReadExactly(buffer);
+        Debug.Assert(BinaryPrimitives.ReadInt32BigEndian(buffer[0..]) == index + 1);
+        Debug.Assert(BinaryPrimitives.ReadInt32BigEndian(buffer[4..]) == length / 2);
+#endif
+        return length;
     }
 
-    public static Shapefile Open(string fileName)
-    {
-        return Open(
-            new FileStream(fileName, FileMode.Open, FileAccess.ReadWrite),
-            ShapeIndex.Open(Path.ChangeExtension(fileName, ".shx")),
-            Dbf.Open(Path.ChangeExtension(fileName, ".dbf")));
-    }
-
-    internal static Shapefile Open(Stream shp, ShapeIndex shx, Dbf dbf)
-    {
-        ArgumentNullException.ThrowIfNull(shp);
-        ArgumentNullException.ThrowIfNull(shx);
-        ArgumentNullException.ThrowIfNull(dbf);
-
-        var (shapeType, boundingBox) = ReadHeader(shp);
-        return new Shapefile(shp, shx, dbf, shapeType, boundingBox);
-    }
-
-    public void Dispose()
-    {
-        Flush();
-        _dbf.Dispose();
-        _shp.Dispose();
-        _shx.Dispose();
-    }
-
-    public void Flush()
-    {
-        if (_dirty)
-        {
-            _dirty = false;
-            WriteHeader(_shp, ShapeType, BoundingBox);
-        }
-        _dbf.Flush();
-        _shp.Flush();
-        _shx.Flush();
-    }
-
-    private static (ShapeType ShapeType, BoundingBox BoundingBox) ReadHeader(Stream stream)
+    protected static (ShapeType ShapeType, BoundingBox BoundingBox) ReadHeader(Stream stream)
     {
         stream.Position = 0;
         Span<byte> buffer = stackalloc byte[100];
@@ -98,11 +138,11 @@ public sealed class Shapefile : IDisposable
         var mMax = BinaryPrimitives.ReadDoubleLittleEndian(buffer[92..]);
 
         Unsafe.SkipInit(out BoundingBox boundingBox);
-        if (shapeType.HasZ())
+        if (shapeType.HasZ)
         {
             boundingBox = new BoundingBox(new Point(xMin, yMin, zMin, mMin), new Point(xMax, yMax, zMax, mMax));
         }
-        else if (shapeType.HasM())
+        else if (shapeType.HasM)
         {
             boundingBox = new BoundingBox(new Point(xMin, yMin, mMin), new Point(xMax, yMax, mMax));
         }
@@ -114,7 +154,7 @@ public sealed class Shapefile : IDisposable
         return (shapeType, boundingBox);
     }
 
-    private static void WriteHeader(Stream stream, ShapeType shapeType, BoundingBox boundingBox)
+    protected static void WriteHeader(Stream stream, ShapeType shapeType, BoundingBox boundingBox)
     {
         stream.Position = 0;
         Span<byte> buffer = stackalloc byte[100];
@@ -126,30 +166,13 @@ public sealed class Shapefile : IDisposable
         BinaryPrimitives.WriteDoubleLittleEndian(buffer[44..], boundingBox.MinY);
         BinaryPrimitives.WriteDoubleLittleEndian(buffer[52..], boundingBox.MaxX);
         BinaryPrimitives.WriteDoubleLittleEndian(buffer[60..], boundingBox.MaxY);
-        BinaryPrimitives.WriteDoubleLittleEndian(buffer[68..], shapeType.HasZ() ? boundingBox.MinZ : 0.0);
-        BinaryPrimitives.WriteDoubleLittleEndian(buffer[76..], shapeType.HasZ() ? boundingBox.MaxZ : 0.0);
-        BinaryPrimitives.WriteDoubleLittleEndian(buffer[84..], shapeType.HasM() ? boundingBox.MinM : 0.0);
-        BinaryPrimitives.WriteDoubleLittleEndian(buffer[92..], shapeType.HasM() ? boundingBox.MaxM : 0.0);
+        BinaryPrimitives.WriteDoubleLittleEndian(buffer[68..], shapeType.HasZ ? boundingBox.MinZ : 0.0);
+        BinaryPrimitives.WriteDoubleLittleEndian(buffer[76..], shapeType.HasZ ? boundingBox.MaxZ : 0.0);
+        BinaryPrimitives.WriteDoubleLittleEndian(buffer[84..], shapeType.HasM ? boundingBox.MinM : 0.0);
+        BinaryPrimitives.WriteDoubleLittleEndian(buffer[92..], shapeType.HasM ? boundingBox.MaxM : 0.0);
     }
 
-
-    internal int PrepareStreamToReadRecord(int index)
-    {
-        var (offset, length) = _shx.GetRecord(index);
-#if !DEBUG
-        _shp.Position = offset + 8;
-#else
-        _shp.Position = offset;
-        Span<byte> buffer = stackalloc byte[8];
-        _shp.ReadExactly(buffer);
-        Debug.Assert(BinaryPrimitives.ReadInt32BigEndian(buffer[0..]) == index + 1);
-        Debug.Assert(BinaryPrimitives.ReadInt32BigEndian(buffer[4..]) == length / 2);
-#endif
-        return length;
-    }
-
-
-    public ShapeRecord<Geometry, DbfRecord> GetRecord(int index)
+    public ShapeRecord<TGeometry, TAttributes> GetRecord(int index)
     {
         var length = PrepareStreamToReadRecord(index);
 
@@ -159,81 +182,72 @@ public sealed class Shapefile : IDisposable
 
         _shp.ReadExactly(buffer.Span);
 
-        var geometry = Geometry.Read(buffer.Span, ShapeType);
+        var geometry = TSerializer.Deserialize(buffer.Span);
+        var attributes = _dbf.GetRecord<TAttributes>(index);
+        return ShapeRecord<TGeometry, TAttributes>.Create(geometry, attributes);
+    }
+
+    // TODO: We can probably unify this with the method above by moving the read into another class.
+    ShapeRecord<Geometry, DbfRecord> IShapefile.GetRecord(int index)
+    {
+        var length = PrepareStreamToReadRecord(index);
+
+        using var buffer = length < 256
+            ? new SpanOwner<byte>(stackalloc byte[length])
+            : new SpanOwner<byte>(length);
+
+        _shp.ReadExactly(buffer.Span);
+
+        var geometry = GeometrySerializer.Deserialize(buffer.Span);
         var attributes = _dbf.GetRecord(index);
         return new ShapeRecord<Geometry, DbfRecord>(geometry, attributes);
     }
 
-    public ShapeRecord<TGeometry, DbfRecord> GetRecord<TGeometry>(int index)
-        where TGeometry : Geometry, IGeometry<TGeometry>
-    {
-        if (!ShapeType.IsCompatibleWithGeometry<TGeometry>())
-        {
-            throw new InvalidOperationException($"Shape type '{ShapeType}' is not compatible with geometry type '{typeof(TGeometry)}'");
-        }
-
-        var length = PrepareStreamToReadRecord(index);
-
-        using var buffer = length < 256
-            ? new SpanOwner<byte>(stackalloc byte[length])
-            : new SpanOwner<byte>(length);
-
-        _shp.ReadExactly(buffer.Span);
-
-        var geometry = TGeometry.Read(buffer.Span);
-        var attributes = _dbf.GetRecord(index);
-        return new ShapeRecord<TGeometry, DbfRecord>(geometry, attributes);
-    }
-
-    public ShapeRecord<TGeometry, TAttributes> GetRecord<TGeometry, TAttributes>(int index)
-        where TGeometry : Geometry, IGeometry<TGeometry>
-    {
-        if (!ShapeType.IsCompatibleWithGeometry<TGeometry>())
-        {
-            throw new InvalidOperationException($"Shape type '{ShapeType}' is not compatible with geometry type '{typeof(TGeometry)}'");
-        }
-
-        var length = PrepareStreamToReadRecord(index);
-
-        using var buffer = length < 256
-            ? new SpanOwner<byte>(stackalloc byte[length])
-            : new SpanOwner<byte>(length);
-
-        _shp.ReadExactly(buffer.Span);
-
-        var geometry = TGeometry.Read(buffer.Span);
-        var attributes = _dbf.GetRecord<TAttributes>(index);
-        return new ShapeRecord<TGeometry, TAttributes>(geometry, attributes);
-    }
-
-    public IEnumerable<ShapeRecord<Geometry, DbfRecord>> EnumerateRecords()
+    public IEnumerator<ShapeRecord<TGeometry, TAttributes>> GetEnumerator()
     {
         var recordCount = RecordCount;
         for (var i = 0; i < recordCount; ++i)
             yield return GetRecord(i);
     }
 
-    public IEnumerable<ShapeRecord<TGeometry, DbfRecord>> EnumerateRecords<TGeometry>()
-        where TGeometry : Geometry, IGeometry<TGeometry>
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+    public void Add(ShapeRecord<TGeometry, TAttributes> record) => Add(record.Geometry, record.Attributes);
+
+    public void Add(TGeometry geometry, TAttributes attributes)
     {
-        var recordCount = RecordCount;
-        for (var i = 0; i < recordCount; ++i)
-            yield return GetRecord<TGeometry>(i);
+        _dirty = true;
+        var index = new ShapeIndexRecord((int)_shp.Length, TSerializer.GetByteSize(geometry));
+
+        using var buffer = index.Length < 256
+            ? new SpanOwner<byte>(stackalloc byte[index.Length])
+            : new SpanOwner<byte>(index.Length);
+
+        TSerializer.Serialize(buffer.Span, geometry);
+
+        _shx.Add(index);
+        _dbf.Add(attributes);
+        _shp.Write(buffer.Span);
     }
 
-    public IEnumerable<ShapeRecord<TGeometry, TAttributes>> EnumerateRecords<TGeometry, TAttributes>()
-        where TGeometry : Geometry, IGeometry<TGeometry>
+    public void Dispose()
     {
-        var recordCount = RecordCount;
-        for (var i = 0; i < recordCount; ++i)
-            yield return GetRecord<TGeometry, TAttributes>(i);
+        Flush();
+        _dbf.Dispose();
+        _shp.Dispose();
+        _shx.Dispose();
+    }
+
+    public void Flush()
+    {
+        if (_dirty)
+        {
+            _dirty = false;
+            WriteHeader(_shp, ShapeType, BoundingBox);
+        }
+
+        _dbf.Flush();
+        _shp.Flush();
+        _shx.Flush();
     }
 }
-
-public sealed record class ShapeRecord<TGeometry, TAttributes>(TGeometry Geometry, TAttributes Attributes)
-    where TGeometry : Geometry;
-
-public sealed record class ShapeRecord<TGeometry>(TGeometry Geometry, DbfRecord Attributes)
-    where TGeometry : Geometry;
-
-public sealed record class ShapeRecord(Geometry Geometry, DbfRecord Attributes);

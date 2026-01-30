@@ -4,34 +4,43 @@ namespace Shape;
 
 internal static class ShapeTypeExtensions
 {
-    public static bool HasZ(this ShapeType shapeType) => shapeType switch
+    extension(ShapeType shapeType)
     {
-        ShapeType.PointZ => true,
-        ShapeType.PolyLineZ => true,
-        ShapeType.PolygonZ => true,
-        ShapeType.MultiPointZ => true,
-        _ => false
-    };
+        public bool HasZ => (int)shapeType / 10 is 1 or 3;
 
-    public static bool HasM(this ShapeType shapeType) => shapeType switch
-    {
-        ShapeType.PointM => true,
-        ShapeType.PolyLineM => true,
-        ShapeType.PolygonM => true,
-        ShapeType.MultiPointM => true,
-        _ => false
-    };
+        public bool HasM => (int)shapeType / 10 >= 1;
 
-    public static bool IsCompatibleWithGeometry<T>(this ShapeType shapeType) =>
-        shapeType.IsCompatibleWithGeometry(typeof(T));
+        public Dimension Dimension => ((int)shapeType / 10) switch
+        {
+            3 => Dimension.Xyzm,
+            2 => Dimension.Xym,
+            1 => Dimension.Xyzm,
+            0 when shapeType is not ShapeType.Null => Dimension.Xy,
+            _ => Dimension.None,
+        };
 
-    public static bool IsCompatibleWithGeometry(this ShapeType shapeType, Type geometryType) => shapeType switch
-    {
-        ShapeType.Point or ShapeType.PointZ or ShapeType.PointM => geometryType == typeof(Point),
-        ShapeType.PolyLine or ShapeType.PolyLineZ or ShapeType.PolyLineM => geometryType == typeof(PolyLine),
-        ShapeType.Polygon or ShapeType.PolygonZ or ShapeType.PolygonM => geometryType == typeof(Polygon),
-        ShapeType.MultiPoint or ShapeType.MultiPointZ or ShapeType.MultiPointM => geometryType == typeof(MultiPoint),
-        ShapeType.MultiPatch => geometryType == typeof(MultiPatch),
-        _ => false
-    };
+        public void EnsureCompatibleWith<T>() where T : Geometry
+        {
+            var geometryType = typeof(T);
+            if (geometryType == typeof(Geometry))
+            {
+                return;
+            }
+
+            var isCompatible = shapeType switch
+            {
+                ShapeType.Point or ShapeType.PointZ or ShapeType.PointM => geometryType == typeof(Point),
+                ShapeType.PolyLine or ShapeType.PolyLineZ or ShapeType.PolyLineM => geometryType == typeof(PolyLine),
+                ShapeType.Polygon or ShapeType.PolygonZ or ShapeType.PolygonM => geometryType == typeof(Polygon),
+                ShapeType.MultiPoint or ShapeType.MultiPointZ or ShapeType.MultiPointM => geometryType == typeof(MultiPoint),
+                ShapeType.MultiPatch => geometryType == typeof(MultiPatch),
+                _ => false
+            };
+
+            if (!isCompatible)
+            {
+                throw new InvalidOperationException($"{nameof(ShapeType)} '{shapeType}' is not compatible with {typeof(T)}");
+            }
+        }
+    }
 }
