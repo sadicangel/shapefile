@@ -54,8 +54,8 @@ public sealed class PointSerializer : IGeometrySerializer<Point>
         if (point.ShapeType is ShapeType.Null) return;
         BinaryPrimitives.WriteDoubleLittleEndian(target[o.X..], point.X);
         BinaryPrimitives.WriteDoubleLittleEndian(target[o.Y..], point.Y);
-        if (point.HasZ) BinaryPrimitives.WriteDoubleLittleEndian(target[o.Z..], point.Z);
-        if (point.HasM) BinaryPrimitives.WriteDoubleLittleEndian(target[o.M..], point.M);
+        if (point.ShapeType.HasZ) BinaryPrimitives.WriteDoubleLittleEndian(target[o.Z..], point.Z);
+        if (point.ShapeType.HasM) BinaryPrimitives.WriteDoubleLittleEndian(target[o.M..], point.M);
     }
 
     public static Point Deserialize(ReadOnlySpan<byte> source)

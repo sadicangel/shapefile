@@ -5,6 +5,22 @@ namespace Shape.Tests.Serialization;
 
 public sealed class PointSerializerTests : SerializerTests
 {
+    [Theory]
+    [InlineData(ShapeType.PointM, 28, 20)]
+    [InlineData(ShapeType.PointZ, 36, 28)]
+    public void Serialize_MissingMeasure_WritesNoDataInsteadOfLeavingBufferContents(ShapeType shapeType, int length, int measureOffset)
+    {
+        var point = shapeType == ShapeType.PointM
+            ? new Point(1, 2, NumericLimits.NoValue)
+            : new Point(1, 2, 3, NumericLimits.NoValue);
+        var buffer = Enumerable.Repeat((byte)0xCC, length).ToArray();
+
+        PointSerializer.Serialize(buffer, point);
+
+        Assert.Equal(NumericLimits.NoValue, ReadF64(buffer, measureOffset));
+        Assert.Equal(point, PointSerializer.Deserialize(buffer));
+    }
+
     [Fact]
     public void Deserialize_NullShape_RecordContents_IsJustShapeType()
     {
