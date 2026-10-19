@@ -1,8 +1,10 @@
-﻿
-using System.Buffers.Binary;
+﻿using System.Buffers.Binary;
+using System.Collections;
+using Shape.Geometries;
 
 namespace Shape;
-public sealed class ShapeIndex : IDisposable
+
+public sealed class ShapeIndex : IDisposable, IEnumerable<ShapeIndexRecord>
 {
     internal const int HeaderLength = 100;
 
@@ -18,7 +20,16 @@ public sealed class ShapeIndex : IDisposable
         _shx = shx;
     }
 
-    public static ShapeIndex Open(string fileName) => Open(new FileStream(fileName, FileMode.Open, FileAccess.ReadWrite));
+    public static ShapeIndex Open(string fileName)
+    {
+        var stream = new FileStream(fileName, FileMode.Open, FileAccess.ReadWrite);
+        try { return Open(stream); }
+        catch
+        {
+            stream.Dispose();
+            throw;
+        }
+    }
 
     public static ShapeIndex Open(Stream stream)
     {
@@ -34,13 +45,17 @@ public sealed class ShapeIndex : IDisposable
         if (BinaryPrimitives.ReadInt32LittleEndian(header[28..]) != 1000)
             throw new InvalidOperationException($"Invalid version. Expected: '1000'. Actual: '{BinaryPrimitives.ReadInt32BigEndian(header[32..])}'");
 
+        if ((stream.Length - HeaderLength) % ShapeIndexRecord.Size != 0 ||
+            (long)BinaryPrimitives.ReadInt32BigEndian(header[24..]) * 2 != stream.Length)
+            throw new InvalidDataException("The SHX file length does not match its header or record layout.");
+
         return new ShapeIndex(stream);
     }
 
     public void Dispose()
     {
-        Flush();
-        _shx.Dispose();
+        try { Flush(); }
+        finally { _shx.Dispose(); }
     }
 
     public void Flush()
@@ -53,10 +68,17 @@ public sealed class ShapeIndex : IDisposable
             _shx.Position = 24;
             _shx.Write(hLength);
         }
+
         _shx.Flush();
     }
 
     internal void SetStreamPositionForIndex(int index) => _shx.Position = HeaderLength + index * ShapeIndexRecord.Size;
+
+    internal void UpdateHeader(ShapeType shapeType, BoundingBox boundingBox)
+    {
+        Shapefile.WriteHeader(_shx, shapeType, boundingBox);
+        _dirty = false;
+    }
 
     public ShapeIndexRecord GetRecord(int index)
     {
@@ -86,7 +108,7 @@ public sealed class ShapeIndex : IDisposable
         _shx.Write(buffer);
     }
 
-    public IEnumerable<ShapeIndexRecord> EnumerateRecords()
+    public IEnumerator<ShapeIndexRecord> GetEnumerator()
     {
         var count = RecordCount;
         for (var i = 0; i < count; i++)
@@ -94,4 +116,6 @@ public sealed class ShapeIndex : IDisposable
             yield return GetRecord(i);
         }
     }
+
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }

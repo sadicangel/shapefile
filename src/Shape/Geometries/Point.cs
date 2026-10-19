@@ -1,41 +1,23 @@
-﻿
-using System.Buffers.Binary;
+﻿using Shape.Serialization;
 
 namespace Shape.Geometries;
 
-public sealed record class Point(double X, double Y, double Z, double M) : Geometry, IGeometry<Point>
+public sealed record class Point(ShapeType ShapeType, double X, double Y, double Z, double M)
+    : Geometry(ShapeType), IGeometry<Point>, IGeometrySerializer<Point>
 {
-    public static Point Empty { get; } = new Point(NoValue, NoValue, NoValue, NoValue);
+    public static Point Empty { get; } = new(ShapeType.Null, NumericLimits.NoValue, NumericLimits.NoValue, NumericLimits.NoValue, NumericLimits.NoValue);
 
-    public bool HasZ => Z > MinValue;
-    public bool HasM => M > MinValue;
+    public bool HasZ => Z > NumericLimits.MinValue;
+    public bool HasM => M > NumericLimits.MinValue;
 
-    public Point(double x, double y, double m) : this(x, y, NoValue, m) { }
+    public Point(double x, double y, double z, double m) : this(ShapeType.PointZ, x, y, z, m) { }
+    public Point(double x, double y, double m) : this(ShapeType.PointM, x, y, NumericLimits.NoValue, m) { }
 
-    public Point(double x, double y) : this(x, y, NoValue, NoValue) { }
+    public Point(double x, double y) : this(ShapeType.Point, x, y, NumericLimits.NoValue, NumericLimits.NoValue) { }
 
     public override BoundingBox GetBoundingBox() => new(this, this);
 
-    public static Point Read(ReadOnlySpan<byte> source)
-    {
-        var shapeType = (ShapeType)BinaryPrimitives.ReadInt32LittleEndian(source);
-        return shapeType switch
-        {
-            ShapeType.Null => Empty,
-            ShapeType.Point => new Point(
-                BinaryPrimitives.ReadDoubleLittleEndian(source[4..]),
-                BinaryPrimitives.ReadDoubleLittleEndian(source[12..])),
-            ShapeType.PointZ => new Point(
-                BinaryPrimitives.ReadDoubleLittleEndian(source[4..]),
-                BinaryPrimitives.ReadDoubleLittleEndian(source[12..]),
-                BinaryPrimitives.ReadDoubleLittleEndian(source[20..]),
-                BinaryPrimitives.ReadDoubleLittleEndian(source[28..])),
-            ShapeType.PointM => new Point(
-                BinaryPrimitives.ReadDoubleLittleEndian(source[4..]),
-                BinaryPrimitives.ReadDoubleLittleEndian(source[12..]),
-                NoValue,
-                BinaryPrimitives.ReadDoubleLittleEndian(source[20..])),
-            _ => throw new InvalidOperationException($"Invalid shape type: {shapeType}. Expected: Point, PointZ, or PointM."),
-        };
-    }
+    static int IGeometrySerializer<Point>.GetByteSize(Point geometry) => PointSerializer.GetByteSize(geometry);
+    static void IGeometrySerializer<Point>.Serialize(Span<byte> target, Point geometry) => PointSerializer.Serialize(target, geometry);
+    static Point IGeometrySerializer<Point>.Deserialize(ReadOnlySpan<byte> source) => PointSerializer.Deserialize(source);
 }
